@@ -247,7 +247,11 @@ class Database:
                     "(id,deck_id,front,back,interval,ease,due,reps,lapses) "
                     "VALUES (?,?,?,?,?,?,?,?,?)",
                     (c["id"], c["deck_id"], c["front"], c["back"],
-                     c.get("interval", 1), c.get("ease", 2.5), c.get("due", 0),
+                     c.get("interval", 1), c.get("ease", 2.5),
+                     # Browser stores due in milliseconds; Python uses seconds.
+                     # Divide by 1000 when the value is clearly in ms (> year 3000 in s).
+                     int(c.get("due", 0)) // 1000
+                     if int(c.get("due", 0)) > 32_503_680_000 else int(c.get("due", 0)),
                      c.get("reps", 0), c.get("lapses", 0)),
                 )
         self.con.commit()
@@ -333,10 +337,11 @@ def generate_cards_async(text: str, api_key: str, model: str, max_cards: int,
                 with urllib.request.urlopen(req, timeout=60) as r:
                     raw = json.loads(r.read())["content"][0]["text"]
 
-            cleaned = raw.strip().lstrip("`").rstrip("`")
-            if cleaned.startswith("json"):
-                cleaned = cleaned[4:]
-            cards = json.loads(cleaned.strip())
+            # Strip markdown fences robustly: ```json ... ``` or plain JSON
+            import re as _re
+            cleaned = _re.sub(r'^```[a-zA-Z]*\n?', '', raw.strip())
+            cleaned = _re.sub(r'\n?```$', '', cleaned).strip()
+            cards = json.loads(cleaned)
             if not isinstance(cards, list):
                 raise ValueError("Model did not return a JSON array.")
             on_success(cards)
@@ -400,7 +405,17 @@ class App(tk.Tk):
         self.minsize(720, 520)
         self.configure(bg=C["bg"])
 
-        self.db = Database(DB_PATH)
+        try:
+            self.db = Database(DB_PATH)
+        except Exception as exc:
+            messagebox.showerror(
+                "Database Error",
+                f"Could not open the FlashAI database:\n\n{exc}\n\n"
+                f"Path: {DB_PATH}\n\n"
+                "Check file permissions or delete the file to start fresh.",
+            )
+            self.destroy()
+            return
         self._setup_ttk_style()
         self._build_header()
         self._build_content()
@@ -492,6 +507,7 @@ class BaseTab(tk.Frame):
 class ReviewTab(BaseTab):
     def __init__(self, parent, app):
         super().__init__(parent, app)
+        self._deck_map: dict[str, str] = {}  # populated by _refresh_deck_combo
         self._queue: list[dict] = []
         self._idx = 0
         self._done = 0

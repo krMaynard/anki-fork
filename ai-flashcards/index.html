@@ -499,7 +499,12 @@ function openImageDB() {
   return new Promise((res, rej) => {
     const req = indexedDB.open('flashai_images', 1);
     req.onupgradeneeded = e => e.target.result.createObjectStore('imgs');
-    req.onsuccess  = e => { _imgDB = e.target.result; res(_imgDB); };
+    req.onsuccess  = e => {
+      _imgDB = e.target.result;
+      // Reset the cache if the browser forces the connection closed (e.g. storage pressure)
+      _imgDB.onclose = () => { _imgDB = null; };
+      res(_imgDB);
+    };
     req.onerror    = e => rej(e.target.error);
   });
 }
@@ -703,6 +708,7 @@ async function renderReviewCard() {
     `<span><span class="dot" style="background:var(--text-2)"></span>${done} done</span>`;
 
   if (session.current >= session.queue.length) {
+    clearBlobURLs(); // revoke any URLs from the last card shown
     ui.style.display = 'none';
     empty.style.display = '';
     empty.textContent = session.totalDue > 0
@@ -955,12 +961,14 @@ function fmtDue(due, now) {
 
 async function deleteCard(deckId, cardId) {
   if (!confirm('Delete this card?')) return;
-  const card = db.decks[deckId].cards.find(c => c.id === cardId);
+  const deck = db.decks[deckId];
+  if (!deck) return; // deck may have been removed in another tab
+  const card = deck.cards.find(c => c.id === cardId);
   if (card) {
     await deleteImage(card.frontImageKey);
     await deleteImage(card.backImageKey);
   }
-  db.decks[deckId].cards = db.decks[deckId].cards.filter(c => c.id !== cardId);
+  deck.cards = deck.cards.filter(c => c.id !== cardId);
   saveData(); renderBrowse();
 }
 
@@ -1083,34 +1091,47 @@ function openAddCardModal() {
     </div>
   `);
 
-  // Wire image pickers (call after showModal)
+  // Wire image pickers synchronously — innerHTML is already in the DOM at this point
   _pendingImages = { front: null, back: null };
-  setTimeout(() => {
-    ['front','back'].forEach(side => {
-      const picker = document.getElementById(`img-${side}-picker`);
-      if (!picker) return;
-      picker.addEventListener('change', async () => {
-        const file = picker.files[0];
-        if (!file) return;
-        const buf = await file.arrayBuffer();
-        _pendingImages[side] = new Blob([buf], { type: file.type });
-        document.getElementById(`img-${side}-name`).textContent = file.name;
-        document.getElementById(`img-${side}-clear`).style.display = 'inline';
-      });
+  ['front','back'].forEach(side => {
+    const picker = document.getElementById(`img-${side}-picker`);
+    if (!picker) return;
+    picker.addEventListener('change', async () => {
+      const file = picker.files[0];
+      if (!file) return;
+      const buf = await file.arrayBuffer();
+      _pendingImages[side] = new Blob([buf], { type: file.type });
+      document.getElementById(`img-${side}-name`).textContent = file.name;
+      document.getElementById(`img-${side}-clear`).style.display = 'inline';
     });
-  }, 50);
+  });
 }
 
+let _addCardInFlight = false;
 async function addCardFromModal() {
+  if (_addCardInFlight) return; // prevent double-submit
   const deckId = document.getElementById('add-card-deck').value;
   const front  = document.getElementById('add-card-front').value.trim();
   const back   = document.getElementById('add-card-back').value.trim();
   if (!front || !back) { alert('Both fields are required.'); return; }
+  const btn = document.querySelector('#modal-box .btn-primary');
+  if (btn) btn.disabled = true;
+  _addCardInFlight = true;
   const card = makeCard(front, back, deckId);
-  if (_pendingImages.front) card.frontImageKey = await saveImage(_pendingImages.front);
-  if (_pendingImages.back)  card.backImageKey  = await saveImage(_pendingImages.back);
-  db.decks[deckId].cards.push(card);
-  saveData(); closeModal(); renderBrowse();
+  try {
+    if (_pendingImages.front) card.frontImageKey = await saveImage(_pendingImages.front);
+    if (_pendingImages.back)  card.backImageKey  = await saveImage(_pendingImages.back);
+    db.decks[deckId].cards.push(card);
+    saveData(); closeModal(); renderBrowse();
+  } catch(err) {
+    // Clean up any image already written before re-throwing to the user
+    await deleteImage(card.frontImageKey).catch(() => {});
+    await deleteImage(card.backImageKey).catch(() => {});
+    alert('Failed to save card: ' + err.message);
+    if (btn) btn.disabled = false;
+  } finally {
+    _addCardInFlight = false;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
