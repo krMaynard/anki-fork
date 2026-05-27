@@ -161,6 +161,7 @@
     letter-spacing: 1px; color: var(--text-2); margin-bottom: 12px; }
   .fc-text  { font-size: 1.3rem; line-height: 1.5; color: var(--text);
     text-align: center; word-break: break-word; }
+  .fc-img { max-width: 100%; max-height: 160px; border-radius: 8px; margin-top: 12px; object-fit: contain; }
 
   #flip-hint { color: var(--text-2); font-size: .85rem; margin-bottom: 16px; }
 
@@ -313,10 +314,12 @@
             <div class="fc-face fc-front">
               <div class="fc-label">Question</div>
               <div class="fc-text" id="fc-front-text"></div>
+              <img id="fc-front-img" class="fc-img" style="display:none" alt="">
             </div>
             <div class="fc-face fc-back">
               <div class="fc-label">Answer</div>
               <div class="fc-text" id="fc-back-text"></div>
+              <img id="fc-back-img" class="fc-img" style="display:none" alt="">
             </div>
           </div>
         </div>
@@ -487,6 +490,65 @@
 <script>
 'use strict';
 // ─────────────────────────────────────────────────────────────────────────────
+// IMAGE STORAGE  (IndexedDB — no localStorage size limit)
+// ─────────────────────────────────────────────────────────────────────────────
+let _imgDB = null;
+
+function openImageDB() {
+  if (_imgDB) return Promise.resolve(_imgDB);
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('flashai_images', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('imgs');
+    req.onsuccess  = e => { _imgDB = e.target.result; res(_imgDB); };
+    req.onerror    = e => rej(e.target.error);
+  });
+}
+
+async function saveImage(blob) {
+  const db = await openImageDB();
+  const key = uid();
+  await new Promise((res, rej) => {
+    const tx = db.transaction('imgs', 'readwrite');
+    tx.objectStore('imgs').put(blob, key);
+    tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
+  });
+  return key;
+}
+
+async function loadImage(key) {
+  if (!key) return null;
+  const db = await openImageDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('imgs', 'readonly');
+    const req = tx.objectStore('imgs').get(key);
+    req.onsuccess = e => res(e.target.result || null);
+    req.onerror   = e => rej(e.target.error);
+  });
+}
+
+async function deleteImage(key) {
+  if (!key) return;
+  const db = await openImageDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('imgs', 'readwrite');
+    tx.objectStore('imgs').delete(key);
+    tx.oncomplete = res; tx.onerror = e => rej(e.target.error);
+  });
+}
+
+// Revoke a blob object URL when card changes
+let _currentBlobURLs = [];
+function clearBlobURLs() {
+  _currentBlobURLs.forEach(u => URL.revokeObjectURL(u));
+  _currentBlobURLs = [];
+}
+function blobToURL(blob) {
+  const u = URL.createObjectURL(blob);
+  _currentBlobURLs.push(u);
+  return u;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // DATA LAYER
 // ─────────────────────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'flashai_data';
@@ -524,6 +586,7 @@ function makeCard(front, back, deckId) {
   return {
     id: uid(), deckId,
     front, back,
+    frontImageKey: null, backImageKey: null,
     interval: 1,      // days
     ease: 2.5,        // ease factor
     due: Date.now(),  // due immediately
@@ -618,10 +681,10 @@ function startReview(deckId) {
   session.current = 0;
   session.doneCount = 0;
   session.totalDue = session.queue.length;
-  renderReviewCard();
+  renderReviewCard().catch(console.error);
 }
 
-function renderReviewCard() {
+async function renderReviewCard() {
   const ui = document.getElementById('review-card-ui');
   const empty = document.getElementById('review-empty');
   const progressBar = document.getElementById('prog-bar');
@@ -651,6 +714,17 @@ function renderReviewCard() {
   const card = session.queue[session.current];
   document.getElementById('fc-front-text').textContent = card.front;
   document.getElementById('fc-back-text').textContent  = card.back;
+
+  // Load card images
+  clearBlobURLs();
+  const fImg = document.getElementById('fc-front-img');
+  const bImg = document.getElementById('fc-back-img');
+  const frontBlob = await loadImage(card.frontImageKey);
+  if (frontBlob) { fImg.src = blobToURL(frontBlob); fImg.style.display = 'block'; }
+  else { fImg.style.display = 'none'; fImg.src = ''; }
+  const backBlob = await loadImage(card.backImageKey);
+  if (backBlob) { bImg.src = blobToURL(backBlob); bImg.style.display = 'block'; }
+  else { bImg.style.display = 'none'; bImg.src = ''; }
 
   isFlipped = false;
   document.getElementById('flashcard').classList.remove('flipped');
@@ -687,7 +761,7 @@ function rateCard(rating) {
 
   session.doneCount++;
   session.current++;
-  renderReviewCard();
+  renderReviewCard().catch(console.error);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -856,8 +930,10 @@ function renderBrowse() {
       : overdue
         ? `<span class="badge badge-orange">${fmtDue(card.due, now)}</span>`
         : `<span class="badge badge-green">${fmtDue(card.due, now)}</span>`;
+    const hasImg = card.frontImageKey || card.backImageKey;
+    const frontDisplay = (hasImg ? '📷 ' : '') + escHtml(card.front);
     return `<tr>
-      <td>${escHtml(card.front)}</td>
+      <td>${frontDisplay}</td>
       <td>${escHtml(card.back)}</td>
       <td>${escHtml(deck.name)}</td>
       <td>${badge}</td>
@@ -877,8 +953,13 @@ function fmtDue(due, now) {
   return diff < 0 ? `${d}d ago` : `in ${d}d`;
 }
 
-function deleteCard(deckId, cardId) {
+async function deleteCard(deckId, cardId) {
   if (!confirm('Delete this card?')) return;
+  const card = db.decks[deckId].cards.find(c => c.id === cardId);
+  if (card) {
+    await deleteImage(card.frontImageKey);
+    await deleteImage(card.backImageKey);
+  }
   db.decks[deckId].cards = db.decks[deckId].cards.filter(c => c.id !== cardId);
   saveData(); renderBrowse();
 }
@@ -950,6 +1031,15 @@ function createDeck() {
 // ─────────────────────────────────────────────────────────────────────────────
 // ADD CARD MODAL
 // ─────────────────────────────────────────────────────────────────────────────
+let _pendingImages = { front: null, back: null };
+
+function clearImgPick(side) {
+  _pendingImages[side] = null;
+  document.getElementById(`img-${side}-name`).textContent = 'No image';
+  document.getElementById(`img-${side}-clear`).style.display = 'none';
+  document.getElementById(`img-${side}-picker`).value = '';
+}
+
 function openAddCardModal() {
   const deckOptions = Object.values(db.decks).map(d =>
     `<option value="${d.id}">${escHtml(d.name)}</option>`).join('');
@@ -967,19 +1057,59 @@ function openAddCardModal() {
       <label>Back (answer)</label>
       <textarea id="add-card-back" rows="3"></textarea>
     </div>
+    <div class="form-row">
+      <label>Front image (optional)</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label class="btn btn-ghost" style="padding:6px 14px;font-size:.8rem;cursor:pointer">
+          📎 Browse <input type="file" accept="image/*" id="img-front-picker" style="display:none">
+        </label>
+        <span id="img-front-name" style="font-size:.8rem;color:var(--text-2)">No image</span>
+        <button id="img-front-clear" onclick="clearImgPick('front')" style="display:none;background:none;border:none;cursor:pointer;color:var(--danger)">✕</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Back image (optional)</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <label class="btn btn-ghost" style="padding:6px 14px;font-size:.8rem;cursor:pointer">
+          📎 Browse <input type="file" accept="image/*" id="img-back-picker" style="display:none">
+        </label>
+        <span id="img-back-name" style="font-size:.8rem;color:var(--text-2)">No image</span>
+        <button id="img-back-clear" onclick="clearImgPick('back')" style="display:none;background:none;border:none;cursor:pointer;color:var(--danger)">✕</button>
+      </div>
+    </div>
     <div style="display:flex;gap:10px;margin-top:4px">
       <button class="btn btn-primary" onclick="addCardFromModal()">Add Card</button>
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
     </div>
   `);
+
+  // Wire image pickers (call after showModal)
+  _pendingImages = { front: null, back: null };
+  setTimeout(() => {
+    ['front','back'].forEach(side => {
+      const picker = document.getElementById(`img-${side}-picker`);
+      if (!picker) return;
+      picker.addEventListener('change', async () => {
+        const file = picker.files[0];
+        if (!file) return;
+        const buf = await file.arrayBuffer();
+        _pendingImages[side] = new Blob([buf], { type: file.type });
+        document.getElementById(`img-${side}-name`).textContent = file.name;
+        document.getElementById(`img-${side}-clear`).style.display = 'inline';
+      });
+    });
+  }, 50);
 }
 
-function addCardFromModal() {
+async function addCardFromModal() {
   const deckId = document.getElementById('add-card-deck').value;
   const front  = document.getElementById('add-card-front').value.trim();
   const back   = document.getElementById('add-card-back').value.trim();
   if (!front || !back) { alert('Both fields are required.'); return; }
-  db.decks[deckId].cards.push(makeCard(front, back, deckId));
+  const card = makeCard(front, back, deckId);
+  if (_pendingImages.front) card.frontImageKey = await saveImage(_pendingImages.front);
+  if (_pendingImages.back)  card.backImageKey  = await saveImage(_pendingImages.back);
+  db.decks[deckId].cards.push(card);
   saveData(); closeModal(); renderBrowse();
 }
 
@@ -1111,6 +1241,7 @@ darkToggle.addEventListener('click', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 populateAllSelects();
 startReview();
+openImageDB().catch(console.error);
 </script>
 </body>
 </html>
