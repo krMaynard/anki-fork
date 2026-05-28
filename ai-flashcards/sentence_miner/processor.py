@@ -3,9 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
-import sys
 from typing import Any
 
 log = logging.getLogger(__name__)
@@ -78,6 +76,7 @@ def _call_llm(
 
 def _call_llm_urllib(user_message: str, api_key: str, model: str) -> str:
     """urllib fallback for environments without the anthropic SDK."""
+    import urllib.error
     import urllib.request
 
     payload = json.dumps(
@@ -97,19 +96,28 @@ def _call_llm_urllib(user_message: str, api_key: str, model: str) -> str:
             "content-type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        try:
+            err_body = json.loads(exc.read())
+            msg = err_body.get("error", {}).get("message", str(exc))
+        except Exception:
+            msg = str(exc)
+        raise RuntimeError(f"Anthropic API error: {msg}") from exc
     return data["content"][0]["text"]
 
 
 def _parse_response(raw: str) -> list[dict[str, Any]]:
-    """Strip optional markdown fences and parse the JSON card list."""
-    cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", raw.strip())
-    cleaned = re.sub(r"\n?```$", "", cleaned).strip()
+    """Extract and parse the JSON object from the LLM response."""
+    # Search for the outermost JSON object regardless of surrounding prose or fences.
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    cleaned = m.group(0).strip() if m else raw.strip()
     try:
         obj = json.loads(cleaned)
     except json.JSONDecodeError as exc:
-        log.warning("LLM returned non-JSON: %s … (%s)", cleaned[:120], exc)
+        log.warning("LLM returned non-JSON: %s … (%s)", raw[:120], exc)
         return []
     cards = obj.get("cards", [])
     valid = []
@@ -135,12 +143,10 @@ def fetch_transcript(video_id: str, language: str) -> list[dict[str, Any]]:
     try:
         from youtube_transcript_api import YouTubeTranscriptApi  # type: ignore[import-untyped]
     except ImportError:
-        print(
-            "[ERROR] youtube-transcript-api is not installed.\n"
-            "  Run: pip install youtube-transcript-api",
-            file=sys.stderr,
+        raise RuntimeError(
+            "youtube-transcript-api is not installed. "
+            "Run: pip install youtube-transcript-api"
         )
-        sys.exit(1)
 
     try:
         return YouTubeTranscriptApi.get_transcript(video_id, languages=[language])

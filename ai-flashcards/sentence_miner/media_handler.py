@@ -54,10 +54,10 @@ def slice_audio(source: Path, start: float, duration: float, output: Path) -> Pa
     cmd = [
         "ffmpeg",
         "-y",                       # overwrite without prompting
-        "-ss", str(start),
         "-i", str(source),
+        "-ss", str(start),          # output-side seeking for sample-accurate cuts
         "-t", str(duration),
-        "-c", "copy",
+        "-c:a", "aac",              # re-encode; stream-copy with AAC can corrupt clips
         "-loglevel", "error",
         str(output),
     ]

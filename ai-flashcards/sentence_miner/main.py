@@ -80,7 +80,7 @@ def run_mining(
             sentence: str = card["reconstructed_sentence"]
             definition: str = card["definition"]
             translation: str = card["english_translation"]
-            start: float = float(card["start_time"])
+            start: float = max(float(card["start_time"]), 0.0)  # clamp LLM-supplied value
             duration: float = max(float(card["duration"]), 0.5)
 
             log.info("[%d/%d] %r @ %.2fs + %.2fs", i, len(cards), word, start, duration)
@@ -162,18 +162,22 @@ def run() -> int:
         )
         return 1
 
-    run_mining(
-        url=args.url,
-        deck=args.deck,
-        language=args.language,
-        target_language=args.target_language,
-        api_key=api_key,
-        anki_url=args.anki_url,
-        model=args.model,
-        limit=args.limit,
-        note_type=args.note_type,
-        window=args.window,
-    )
+    try:
+        run_mining(
+            url=args.url,
+            deck=args.deck,
+            language=args.language,
+            target_language=args.target_language,
+            api_key=api_key,
+            anki_url=args.anki_url,
+            model=args.model,
+            limit=args.limit,
+            note_type=args.note_type,
+            window=args.window,
+        )
+    except Exception as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

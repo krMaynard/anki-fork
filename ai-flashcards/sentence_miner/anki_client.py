@@ -37,8 +37,12 @@ class AnkiClient:
                 result = json.loads(resp.read())
         except urllib.error.URLError as exc:
             raise AnkiError(f"Cannot reach AnkiConnect at {self.url}: {exc}") from exc
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise AnkiError(f"AnkiConnect returned non-JSON response: {exc}") from exc
         if result.get("error"):
             raise AnkiError(result["error"])
+        if "result" not in result:
+            raise AnkiError(f"Unexpected AnkiConnect response (no 'result' key): {result}")
         return result["result"]
 
     def ping(self) -> int:
