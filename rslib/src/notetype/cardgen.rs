@@ -126,6 +126,17 @@ impl<N: Deref<Target = Notetype>> CardGenContext<N> {
         if !note.tags.is_empty() {
             nonempty_fields.insert("Tags");
         }
+        // Deck, Subdeck, Type and Card are always populated when a card is
+        // rendered (see render.rs/add_special_fields), so templates that switch
+        // on them - e.g. `{{^Deck}}` - must be evaluated with them present.
+        // Otherwise card generation and the empty card check disagree with the
+        // rendered card, leaving empty cards undetected (#4750). The remaining
+        // special fields are intentionally excluded: CardFlag and CardID derive
+        // from a card that doesn't exist yet at generation time (and CardFlag
+        // has historically rendered empty for unflagged cards), and FrontSide is
+        // only available on the answer. Assuming any of these present risks the
+        // opposite, data-losing error of hiding a genuinely empty card.
+        nonempty_fields.extend(["Deck", "Subdeck", "Type", "Card"]);
 
         self.cards
             .iter()
@@ -461,6 +472,54 @@ mod test {
         let cards = context.new_cards_required(&note, &[], true);
         assert_eq!(cards.len(), 1);
         assert_eq!(cards[0].ord, 0);
+    }
+
+    /// A `{{^Deck}}` conditional is always hidden at render time because Deck
+    /// is always populated, so a card whose only content sits inside it must be
+    /// treated as empty rather than generated (#4750).
+    #[test]
+    fn new_cards_required_negated_special_field_is_empty() {
+        let mut col = CollectionBuilder::default().build().unwrap();
+        let arc_note_type = col
+            .get_notetype_by_name("Basic (and reversed card)")
+            .unwrap()
+            .unwrap();
+        let mut note_type = (*arc_note_type).clone();
+        // make the reverse card's front depend solely on {{^Deck}}
+        note_type.templates[1].config.q_format = "{{^Deck}}{{Back}}{{/Deck}}".to_string();
+        let mut note = note_type.new_note();
+        let context = CardGenContext::new(&note_type, None, Usn(-1));
+        note.set_field(0, "Front").unwrap();
+        note.set_field(1, "Back").unwrap();
+
+        let cards = context.new_cards_required(&note, &[], true);
+        // only the forward card should be generated; the reverse card's front
+        // renders empty once Deck is treated as present
+        let ords: HashSet<u32> = cards.iter().map(|c| c.ord).collect();
+        assert_eq!(ords, HashSet::from([0]));
+    }
+
+    /// Conversely, a positive `{{#Deck}}` conditional is always shown at render
+    /// time, so a card whose content sits inside it must still be generated when
+    /// the inner field has content - the fix must not suppress real cards.
+    #[test]
+    fn new_cards_required_positive_special_field_still_generates() {
+        let mut col = CollectionBuilder::default().build().unwrap();
+        let arc_note_type = col
+            .get_notetype_by_name("Basic (and reversed card)")
+            .unwrap()
+            .unwrap();
+        let mut note_type = (*arc_note_type).clone();
+        note_type.templates[1].config.q_format = "{{#Deck}}{{Back}}{{/Deck}}".to_string();
+        let mut note = note_type.new_note();
+        let context = CardGenContext::new(&note_type, None, Usn(-1));
+        note.set_field(0, "Front").unwrap();
+        note.set_field(1, "Back").unwrap();
+
+        let cards = context.new_cards_required(&note, &[], true);
+        // both cards generate: the reverse card's {{#Deck}} block is shown
+        let ords: HashSet<u32> = cards.iter().map(|c| c.ord).collect();
+        assert_eq!(ords, HashSet::from([0, 1]));
     }
 
     /// Tests if card generation skips ordinals that already exist(duplication)
