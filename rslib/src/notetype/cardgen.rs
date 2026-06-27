@@ -500,8 +500,9 @@ mod test {
     }
 
     /// Conversely, a positive `{{#Deck}}` conditional is always shown at render
-    /// time, so a card whose content sits inside it must still be generated when
-    /// the inner field has content - the fix must not suppress real cards.
+    /// time, so a card whose content sits inside it must still be generated
+    /// when the inner field has content - the fix must not suppress real
+    /// cards.
     #[test]
     fn new_cards_required_positive_special_field_still_generates() {
         let mut col = CollectionBuilder::default().build().unwrap();
