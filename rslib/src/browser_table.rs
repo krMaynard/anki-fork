@@ -723,7 +723,7 @@ mod test {
     #[test]
     fn average_ease_does_not_overflow() {
         // summing 30 ease factors of 2500 exceeds u16::MAX (65_535)
-        assert_eq!(average_ease_percent(&vec![2500u16; 30]), 250);
+        assert_eq!(average_ease_percent(&[2500u16; 30]), 250);
         assert_eq!(average_ease_percent(&[2500]), 250);
     }
 }
