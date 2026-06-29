@@ -122,21 +122,30 @@ impl<N: Deref<Target = Notetype>> CardGenContext<N> {
         extracted: &ExtractedCardInfo,
     ) -> Vec<CardToGenerate> {
         let mut nonempty_fields = note.nonempty_fields(&self.notetype.fields);
-        // Include Tags as a nonempty field when note has tags to render {{#Tags}}
-        if !note.tags.is_empty() {
+        // A note field whose name exactly matches a special field shadows it at
+        // render time (add_special_fields uses `map.entry(name).or_insert_with`,
+        // and field lookup is case-sensitive). When that happens the special
+        // field is *not* always populated, so we must not assume it present -
+        // otherwise we could skip generating a card that would actually render.
+        let shadowed = |name: &str| self.notetype.fields.iter().any(|f| f.name == name);
+        // Include Tags as a nonempty field when the note has tags, to render
+        // {{#Tags}} / {{^Tags}}.
+        if !note.tags.is_empty() && !shadowed("Tags") {
             nonempty_fields.insert("Tags");
         }
         // Deck, Subdeck, Type and Card are always populated when a card is
         // rendered (see render.rs/add_special_fields), so templates that switch
-        // on them - e.g. `{{^Deck}}` - must be evaluated with them present.
-        // Otherwise card generation and the empty card check disagree with the
-        // rendered card, leaving empty cards undetected (#4750). The remaining
-        // special fields are intentionally excluded: CardFlag and CardID derive
-        // from a card that doesn't exist yet at generation time (and CardFlag
-        // has historically rendered empty for unflagged cards), and FrontSide is
-        // only available on the answer. Assuming any of these present risks the
-        // opposite, data-losing error of hiding a genuinely empty card.
-        nonempty_fields.extend(["Deck", "Subdeck", "Type", "Card"]);
+        // on them - e.g. `{{^Deck}}` - must be evaluated with them present, or
+        // card generation and the empty card check disagree with the rendered
+        // card and leave empty cards undetected (#4750). CardFlag, CardID and
+        // FrontSide are excluded: they derive from a not-yet-existing card / are
+        // answer-only, so assuming them present risks the opposite, data-losing
+        // error of hiding a genuinely empty card.
+        for special in ["Deck", "Subdeck", "Type", "Card"] {
+            if !shadowed(special) {
+                nonempty_fields.insert(special);
+            }
+        }
 
         self.cards
             .iter()
@@ -519,6 +528,33 @@ mod test {
 
         let cards = context.new_cards_required(&note, &[], true);
         // both cards generate: the reverse card's {{#Deck}} block is shown
+        let ords: HashSet<u32> = cards.iter().map(|c| c.ord).collect();
+        assert_eq!(ords, HashSet::from([0, 1]));
+    }
+
+    /// A note field named after a special field (e.g. `Deck`) shadows the
+    /// special field at render time, so `{{^Deck}}` is active when that field
+    /// is empty and the card must still be generated - generation must not
+    /// assume the special Deck is present in that case.
+    #[test]
+    fn new_cards_required_special_field_shadowed_by_note_field() {
+        let mut col = CollectionBuilder::default().build().unwrap();
+        let arc_note_type = col
+            .get_notetype_by_name("Basic (and reversed card)")
+            .unwrap()
+            .unwrap();
+        let mut note_type = (*arc_note_type).clone();
+        // rename the second field to "Deck" so it shadows the special field
+        note_type.fields[1].name = "Deck".to_string();
+        note_type.templates[1].config.q_format = "{{^Deck}}{{Front}}{{/Deck}}".to_string();
+        let mut note = note_type.new_note();
+        let context = CardGenContext::new(&note_type, None, Usn(-1));
+        note.set_field(0, "hello").unwrap();
+        // the "Deck" field (index 1) is left empty
+
+        let cards = context.new_cards_required(&note, &[], true);
+        // the reverse card renders (empty shadowing Deck -> {{^Deck}} active),
+        // so both cards must be generated
         let ords: HashSet<u32> = cards.iter().map(|c| c.ord).collect();
         assert_eq!(ords, HashSet::from([0, 1]));
     }

@@ -19,9 +19,16 @@ fn split_on_unescaped_colon(text: &str) -> Vec<&str> {
     let mut start = 0;
     let bytes = text.as_bytes();
     for i in 0..bytes.len() {
-        if bytes[i] == b':' && (i == 0 || bytes[i - 1] != b'\\') {
-            parts.push(&text[start..i]);
-            start = i + 1;
+        if bytes[i] == b':' {
+            // An even number of preceding backslashes means they pair off and
+            // the colon itself is unescaped (a separator); an odd number means
+            // the colon is escaped (`\:`) and part of the value.
+            let preceding_backslashes =
+                bytes[..i].iter().rev().take_while(|&&b| b == b'\\').count();
+            if preceding_backslashes % 2 == 0 {
+                parts.push(&text[start..i]);
+                start = i + 1;
+            }
         }
     }
     parts.push(&text[start..]);

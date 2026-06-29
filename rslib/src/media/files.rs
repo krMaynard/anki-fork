@@ -215,14 +215,15 @@ pub(crate) fn add_hash_suffix_to_file_stem(fname: &str, hash: &Sha1Hash) -> Stri
 
     let (stem, ext) = split_and_truncate_filename(fname, max_len);
 
-    if ext.is_empty() {
-        // Avoid producing a trailing dot for an extensionless filename, which
-        // is invalid on Windows; the other filename paths apply the same
-        // trailing-character fix-up.
-        format!("{}-{}", stem, hex::encode(hash))
-    } else {
-        format!("{}-{}.{}", stem, hex::encode(hash), ext)
+    let mut name = format!("{}-{}", stem, hex::encode(hash));
+    // Only append the extension when there is one; an extensionless filename
+    // must not gain a trailing dot, which is invalid on Windows (the other
+    // filename paths apply the same trailing-character fix-up).
+    if !ext.is_empty() {
+        name.push('.');
+        name.push_str(ext);
     }
+    name
 }
 
 /// If filename is longer than max_bytes, truncate it.
