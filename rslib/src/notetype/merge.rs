@@ -26,11 +26,13 @@ impl Notetype {
             match self.find_field(field) {
                 Some(i) if i == index => (),
                 // `other` may have more fields than us (e.g. a corrupt notetype
-                // with a field matching one of ours twice). Only re-align when
-                // `index` is a real slot in our list; otherwise the field is
-                // already present, so leave it in place rather than panicking.
+                // with a field matching one of ours twice). Only move a matched
+                // field earlier (`i > index`); this both avoids spuriously
+                // reordering already-aligned fields when `other` has duplicates
+                // and keeps the swap in bounds (i is always < len), so a longer
+                // `other` can't panic.
                 Some(i) => {
-                    if index < self.fields.len() {
+                    if i > index {
                         self.fields.swap(i, index);
                     }
                 }
@@ -56,10 +58,11 @@ impl Notetype {
         for (index, template) in other.templates.iter().enumerate() {
             match self.find_template(template) {
                 Some(i) if i == index => (),
-                // see merge_fields: only re-align when `index` is a real slot;
-                // a longer `other` would otherwise go out of bounds
+                // see merge_fields: only move a matched template earlier
+                // (`i > index`) to avoid spurious reordering on duplicates and
+                // keep the swap in bounds
                 Some(i) => {
-                    if index < self.templates.len() {
+                    if i > index {
                         self.templates.swap(i, index);
                     }
                 }
@@ -107,8 +110,6 @@ impl CardTemplate {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashSet;
-
     use itertools::assert_equal;
 
     use super::*;
@@ -194,9 +195,12 @@ mod test {
 
         basic.merge(&other);
 
-        // every distinct incoming field is present, with no duplicates
-        let names: HashSet<&str> = basic.field_names().map(String::as_str).collect();
-        assert_eq!(names, HashSet::from(["Front", "Back", "Extra1", "Extra2"]));
+        // every distinct incoming field is present, in its original order, with
+        // no duplicates and no spurious reordering of the healthy fields
+        assert_equal(
+            basic.field_names(),
+            ["Front", "Back", "Extra1", "Extra2"].iter(),
+        );
         assert_eq!(basic.fields.len(), 4);
     }
 
@@ -211,10 +215,9 @@ mod test {
 
         basic.merge(&other);
 
-        let names: HashSet<&str> = basic.template_names().map(String::as_str).collect();
-        assert_eq!(
-            names,
-            HashSet::from(["Card 1", "Card 2", "Extra1", "Extra2"])
+        assert_equal(
+            basic.template_names(),
+            ["Card 1", "Card 2", "Extra1", "Extra2"].iter(),
         );
         assert_eq!(basic.templates.len(), 4);
     }

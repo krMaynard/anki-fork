@@ -528,10 +528,12 @@ fn delimiter_from_value(value: &str) -> Option<Delimiter> {
     })
 }
 
-fn delimiter_from_reader(mut reader: impl Read) -> Result<Delimiter> {
-    let mut buf = [0; 8 * 1024];
-    let n = reader.read(&mut buf)?;
-    let text = String::from_utf8_lossy(&buf[..n]);
+fn delimiter_from_reader(reader: impl Read) -> Result<Delimiter> {
+    // read_to_end avoids a short read (a fixed-size `read` can return fewer
+    // bytes than available for a pipe/socket); cap it at 8KB via take.
+    let mut buf = Vec::with_capacity(8 * 1024);
+    reader.take(8 * 1024).read_to_end(&mut buf)?;
+    let text = String::from_utf8_lossy(&buf);
     // Examine the first several non-empty lines and pick the delimiter that
     // splits them most consistently (the same positive count on the most
     // lines). This avoids choosing a delimiter that merely appears inside field

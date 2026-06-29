@@ -69,8 +69,11 @@ impl NativeDeckName {
             // descendants. Compare on component boundaries, so a sibling whose
             // name merely shares a string prefix (e.g. `foo::bar` and
             // `foo::barbaz`) is not mistaken for a descendant.
-            let onto_self_or_descendant =
-                target.0 == self.0 || target.0.starts_with(&format!("{}\x1f", self.0));
+            let onto_self_or_descendant = target.0 == self.0
+                || target
+                    .0
+                    .strip_prefix(self.0.as_str())
+                    .is_some_and(|rest| rest.starts_with('\x1f'));
             if onto_self_or_descendant {
                 // foo onto foo::bar, or foo onto itself -> no-op
                 None

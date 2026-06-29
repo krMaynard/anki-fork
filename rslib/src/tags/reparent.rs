@@ -105,8 +105,10 @@ fn reparented_name(existing_name: &str, new_parent: Option<&str>) -> Option<Stri
         // Compare on :: component boundaries, so a sibling whose name merely
         // shares a string prefix (e.g. foo::bar onto foo::barbaz) is not
         // mistaken for a descendant and silently dropped.
-        let onto_self_or_descendant =
-            new_parent == existing_name || new_parent.starts_with(&format!("{existing_name}::"));
+        let onto_self_or_descendant = new_parent == existing_name
+            || new_parent
+                .strip_prefix(existing_name)
+                .is_some_and(|rest| rest.starts_with("::"));
         if onto_self_or_descendant {
             // foo onto foo::bar, or foo onto itself -> no-op
             None

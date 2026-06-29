@@ -105,12 +105,16 @@ impl CardContext<'_> {
             // afterwards would miss the lookup and leave the card pointing at the
             // wrong template whenever a note's id changes on import. Doing it here
             // also means card_ordinal_already_exists dedupes on the final ordinal.
-            card.template_idx = remapped_template_index(
-                self.notetype_map,
-                self.remapped_templates,
-                card.note_id,
-                card.template_idx,
-            );
+            // The common import has no remapped templates, so skip the per-card
+            // lookup entirely in that case.
+            if !self.remapped_templates.is_empty() {
+                card.template_idx = remapped_template_index(
+                    self.notetype_map,
+                    self.remapped_templates,
+                    card.note_id,
+                    card.template_idx,
+                );
+            }
             if self.map_to_imported_note(card) && !self.card_ordinal_already_exists(card) {
                 self.add_card(card)?;
             }
