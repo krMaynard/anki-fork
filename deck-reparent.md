@@ -1,6 +1,6 @@
 ## Linked issue (required)
 
-N/A (no existing tracking issue)
+Closes #5183
 
 ## Summary / motivation (required)
 
@@ -18,12 +18,12 @@ The fix compares on `\x1f` component boundaries so only the deck itself or a gen
 
 ### Checklist (minimum)
 
-- [ ] I ran `./ninja check` or an equivalent relevant check locally.
+- [x] I ran `./ninja check` or an equivalent relevant check locally.
 - [x] I added or updated tests when the change is non-trivial or behavior changed.
 
 ### Details
 
-Adds a regression assertion to the `drag_drop` test. Developed and passed full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) on a combined branch; per-branch CI runs on push. Draft until CI is green.
+Adds a regression assertion to the `drag_drop` test. The full CI workflow (`check` on Linux/macOS/Windows, `format`, `minilints`) was run against this exact commit on my fork: https://github.com/krMaynard/anki-fork/actions/runs/29983583656
 
 ## Before / after behavior (optional)
 
