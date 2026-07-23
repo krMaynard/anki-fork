@@ -1,6 +1,6 @@
 ## Linked issue (required)
 
-N/A (no existing tracking issue)
+Fixes #5186
 
 ## Summary / motivation (required)
 
@@ -23,12 +23,12 @@ The fix parses by splitting the shape off the first colon, then splitting the re
 
 ### Checklist (minimum)
 
-- [ ] I ran `./ninja check` or an equivalent relevant check locally.
+- [x] I ran `./ninja check` or an equivalent relevant check locally.
 - [x] I added or updated tests when the change is non-trivial or behavior changed.
 
 ### Details
 
-Adds/updates unit tests for empty-value and backslash-value inputs preserving subsequent properties. Developed and passed full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) on a combined branch; per-branch CI runs on push. Draft until CI is green.
+Adds a unit test covering empty-value and backslash-value inputs preserving subsequent properties. The full CI workflow (`check` on Linux/macOS/Windows, `format`, `minilints`) was run against this exact commit on my fork: https://github.com/krMaynard/anki-fork/actions/runs/29983177217
 
 ## Before / after behavior (optional)
 
