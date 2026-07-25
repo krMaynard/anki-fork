@@ -1,6 +1,6 @@
 ## Linked issue (required)
 
-N/A (no existing tracking issue)
+Fixes #5209
 
 ## Summary / motivation (required)
 
@@ -21,12 +21,12 @@ The fix computes the remapped index in `import_cards` using the **source** note 
 
 ### Checklist (minimum)
 
-- [ ] I ran `./ninja check` or an equivalent relevant check locally.
+- [x] I ran `./ninja check` or an equivalent relevant check locally (via the fork CI run linked below).
 - [x] I added or updated tests when the change is non-trivial or behavior changed.
 
 ### Details
 
-Adds a unit test for the remap lookup exercising the source-note-id keying. This change was developed and passed full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) as part of a combined branch; per-branch CI runs here on push. Marked draft until CI is green.
+Adds a unit test for the remap lookup exercising the source-note-id keying. Full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) was run against this exact commit on the fork: https://github.com/krMaynard/anki-fork/actions/runs/30167008557 — build, lint, and test pass on all three OSes. (The run shows red only for the `Upload SARIF results for complexipy` step, which always fails on forks due to a token-permission limitation, not a code failure.)
 
 ## Before / after behavior (optional)
 
