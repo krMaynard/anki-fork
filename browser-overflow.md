@@ -1,6 +1,6 @@
 ## Linked issue (required)
 
-N/A (no existing tracking issue)
+Fixes #5207
 
 ## Summary / motivation (required)
 
@@ -21,12 +21,14 @@ The fix extracts the two averages into small helpers that accumulate in a wider 
 
 ### Checklist (minimum)
 
-- [ ] I ran `./ninja check` or an equivalent relevant check locally.
+- [x] I ran `./ninja check` or an equivalent relevant check locally.
 - [x] I added or updated tests when the change is non-trivial or behavior changed.
 
 ### Details
 
-Adds unit tests covering the overflow-triggering inputs for both helpers. Developed and passed full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) on a combined branch; per-branch CI runs on push. Draft until CI is green.
+Adds unit tests covering the overflow-triggering inputs for both helpers. The full CI workflow ran against this exact commit: https://github.com/krMaynard/anki-fork/actions/runs/30141307409
+
+`Build, lint, and test` passed on Linux, macOS, and Windows, and `format` and `minilints` passed. The workflow's only failure was the Linux SARIF upload step (`Resource not accessible by integration`), after the substantive Linux checks had passed.
 
 ## Before / after behavior (optional)
 
