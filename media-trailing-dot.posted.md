@@ -1,6 +1,6 @@
 ## Linked issue (required)
 
-N/A (no existing tracking issue)
+Fixes #5211
 
 ## Summary / motivation (required)
 
@@ -22,7 +22,7 @@ The fix omits the `.` separator when there is no extension.
 
 ### Details
 
-Adds a unit test for the extensionless case. Developed and passed full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) on a combined branch; per-branch CI runs on push. Draft until CI is green.
+Adds a unit test for the extensionless case. Full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) passed on this branch: https://github.com/krMaynard/anki-fork/actions/runs/30211937815 (the only failing step is the SARIF upload, which cannot succeed on forks).
 
 ## Before / after behavior (optional)
 
