@@ -1,6 +1,6 @@
 ## Linked issue (required)
 
-N/A (no existing tracking issue)
+Fixes #5215
 
 ## Summary / motivation (required)
 
@@ -18,12 +18,12 @@ The fix escapes `$` to `$$` for non-regex replacements so it is inserted verbati
 
 ### Checklist (minimum)
 
-- [ ] I ran `./ninja check` or an equivalent relevant check locally.
+- [x] I ran `./ninja check` or an equivalent relevant check locally.
 - [x] I added or updated tests when the change is non-trivial or behavior changed.
 
 ### Details
 
-Adds a regression test for literal `$` in non-regex replacements. Developed and passed full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) on a combined branch; per-branch CI runs on push. Draft until CI is green.
+Adds a regression test for literal `$` in non-regex replacements. Full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) run against this exact commit on my fork: https://github.com/krMaynard/anki-fork/actions/runs/30287938613 — all green except the "Upload SARIF results for complexipy" step on the Linux job, which fails on every fork run with "Resource not accessible by integration" (a permissions limitation of running CodeQL uploads outside the upstream repo, unrelated to this change); the "Build, lint, and test" step passed on all three `check` jobs.
 
 ## Before / after behavior (optional)
 
