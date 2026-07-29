@@ -1,6 +1,6 @@
 ## Linked issue (required)
 
-N/A (no existing tracking issue)
+Fixes #5230 (tag counterpart of the deck bug in #5183, fixed by #5188)
 
 ## Summary / motivation (required)
 
@@ -23,7 +23,7 @@ The fix compares on `::` component boundaries so only the tag itself or a genuin
 
 ### Details
 
-Adds a regression test. Developed and passed full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) on a combined branch; per-branch CI runs on push. Draft until CI is green.
+Adds a regression test. Full CI (`check` on Linux/macOS/Windows, `format`, `minilints`) passed on this branch: https://github.com/krMaynard/anki-fork/actions/runs/30467601738 (the only failing step is the SARIF upload, which cannot succeed on forks).
 
 ## Before / after behavior (optional)
 
